@@ -1,132 +1,101 @@
-# MicroPython MAX7219 8x8 LED Matrix
+# Python MAX7219 8x8 LED Matrix
 
-A MicroPython library for the MAX7219 8x8 LED matrix driver, SPI interface, supports cascading and uses [framebuf](http://docs.micropython.org/en/latest/pyboard/library/framebuf.html)
+A Python library for the MAX7219 8x8 LED matrix driver over SPI, for use on the
+Raspberry Pi and other Linux devices with an SPI interface. Supports cascading
+and uses [Pillow (PIL)](https://pillow.readthedocs.io/) for drawing.
 
-## PyBoard Examples
+Ported from [mcauser's micropython-max7219](https://github.com/mcauser/micropython-max7219).
+
+## Requirements
+
+* A Linux device with an SPI interface (e.g. Raspberry Pi) with SPI enabled.
+* [spidev](https://pypi.org/project/spidev/)
+* [Pillow](https://pypi.org/project/Pillow/)
+
+## Usage
+
+The constructor opens the SPI device and initialises the display. The chip
+select is handled by the kernel, so only the SPI bus and device numbers are
+needed. Call `close()` when done to release the SPI device.
 
 **Single 8x8 LED Matrix**
 
 ```python
 import max7219
-from machine import Pin, SPI
-spi = SPI(1)
-display = max7219.Matrix8x8(spi, Pin('X5'), 1)
-display.text('1',0,0,1)
+
+display = max7219.Matrix8x8(num=1)
+display.text('1', 0, 0, 1)
 display.show()
+display.close()
 ```
 
 **Chain of 4x 8x8 LED Matrices**
-Where the 4 is drawn on the DIN matrix.
 
 ```python
 import max7219
-from machine import Pin, SPI
-spi = SPI(1)
-display = max7219.Matrix8x8(spi, Pin('X5'), 4)
-display.text('1234',0,0,1)
+
+display = max7219.Matrix8x8(num=4)
+display.text('1234', 0, 0, 1)
 display.show()
+display.close()
 ```
 
-**Chain of 8x 8x8 LED Matrices**
-Where the 8 is drawn on the DIN matrix
+**Selecting an SPI bus/device and flipping the display**
 
 ```python
 import max7219
-from machine import Pin, SPI
-spi = SPI(1)
-display = max7219.Matrix8x8(spi, Pin('X5'), 8)
-display.text('12345678',0,0,1)
+
+# SPI bus 0, chip-select device 1, rotated 180 degrees.
+display = max7219.Matrix8x8(num=4, spi_bus=0, spi_device=1, flip=True)
+display.brightness(0)  # 0 (dim) to 15 (bright)
+display.text('1234', 0, 0, 1)
 display.show()
+display.close()
 ```
 
-**Framebuf shapes and text**
+**Drawing shapes and text**
+
+The display exposes [Pillow](https://pillow.readthedocs.io/) primitives. The
+backing image is 1-bit (`8 * num` wide, 8 tall); use `1` to set a pixel and `0`
+to clear it.
 
 ```python
-display.fill(0)
+display.putpixel((0, 0), 1)
+display.putpixel((1, 1), 1)
+display.line((8, 0, 16, 8), fill=1)
+display.rectangle((17, 1, 23, 7), outline=1)
+display.rectangle((25, 1, 31, 7), fill=1)
 display.show()
 
-display.pixel(0,0,1)
-display.pixel(1,1,1)
-display.hline(0,4,8,1)
-display.vline(4,0,8,1)
-display.line(8, 0, 16, 8, 1)
-display.rect(17,1,6,6,1)
-display.fill_rect(25,1,6,6,1)
+# Clear the display.
+display.rectangle((0, 0, 8 * display.num - 1, 7), fill=0)
+display.text('dead', 0, 0, 1)
 display.show()
-
-display.fill(0)
-display.text('dead',0,0,1)
-display.text('beef',32,0,1)
-display.show()
-
-display.fill(0)
-display.text('12345678',0,0,1)
-display.show()
-display.scroll(-8,0) # 23456788
-display.scroll(-8,0) # 34567888
-display.show()
-```
-
-## ESP8266 Examples
-
-Default baud rate of 80Mhz was introducing errors, dropped from 10Mhz and it works consistently.
-
-```python
-import max7219
-from machine import Pin, SPI
-spi = SPI(1, baudrate=10000000, polarity=0, phase=0)
-display = max7219.Matrix8x8(spi, Pin(15), 4)
-display.brightness(0)
-display.fill(0)
-display.text('1234',0,0,1)
-display.show()
-```
-
-## ESP32 Examples
-
-Default baud rate of 80Mhz was introducing errors, dropped from 10Mhz and it works consistently.
-
-```python
-import max7219
-from machine import Pin, SPI
-spi = SPI(1, baudrate=10000000, polarity=1, phase=0, sck=Pin(4), mosi=Pin(2))
-ss = Pin(5, Pin.OUT)
-display = max7219.Matrix8x8(spi, ss, 4)
-display.text('1234',0,0,1)
-display.show()
+display.close()
 ```
 
 ## Connections
 
-PyBoard | max7219 8x8 LED Matrix
-------- | ----------------------
-VIN     | VCC
-GND     | GND
-X8 MOSI | DIN
-X5 CS   | CS
-X6 SCK  | CLK
+The chip select is driven by the kernel; pick the device with `spi_device`
+(`CE0` is device `0`, `CE1` is device `1`).
 
-Wemos D1 Mini    | max7219 8x8 LED Matrix
----------------- | ----------------------
-5V               | VCC
-GND              | GND
-D7 MOSI (GPIO13) | DIN
-D8 CS (GPIO15)   | CS
-D5 SCK (GPIO14)  | CLK
+The connections differ by the SPI interface use. The following is an example only for connection to
+Raspberry Pi on the SPI0, CE0 interface:
 
-ESP32            | max7219 8x8 LED Matrix
----------------- | ----------------------
-5V               | VCC 
-GND              | GND
-D2 MOSI          | DIN
-D5 CS            | CS
-D4 SCK           | CLK
+Raspberry Pi (SPI0, CE0)         | max7219 8x8 LED Matrix
+---------------------------------|-----------------------
+5V (pin 2)                       | VCC
+GND (pin 6)                      | GND
+MOSI / GPIO10 (pin 19)           | DIN
+CE0 / GPIO8 (pin 24)             | CS
+SCLK / GPIO11 (pin 23)           | CLK
 
 ## Links
 
-* Based on [deshipu's max7219.py](https://bitbucket.org/thesheep/micropython-max7219/src)
-* [micropython.org](http://micropython.org)
-* [Docs on framebuf](http://docs.micropython.org/en/latest/pyboard/library/framebuf.html)
+* Ported from [mcauser's micropython-max7219](https://github.com/mcauser/micropython-max7219)
+* Originally based on [deshipu's max7219.py](https://bitbucket.org/thesheep/micropython-max7219/src)
+* [Pillow documentation](https://pillow.readthedocs.io/)
+* [spidev documentation](https://pypi.org/project/spidev/)
 
 ## License
 
